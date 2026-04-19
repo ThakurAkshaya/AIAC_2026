@@ -1,0 +1,1251 @@
+Prompts:
+Build a complete web-based prototype named "CSP-Guard" that analyzes copied code snippets and determines whether they are 
+safe when reused in a new context using AI-assisted semantic analysis and context comparison.
+
+The system should follow this pipeline:
+
+1. Perform clone detection between source and destination code using token similarity, AST similarity, and data flow similarity.
+2. Extract execution context from both code snippets.
+3. Compute Execution Context Delta (ECD), representing differences between source and destination contexts.
+4. Calculate a multi-dimensional risk score.
+5. Generate a detailed report with explanation and suggested fixes.
+
+Execution Context Delta (ECD) must analyze:
+
+* Variables (V): type, scope, mutability
+* Scope bindings (S)
+* Exception handling (E)
+* Taint (T): user input or unsafe data flow
+* Resource usage (R)
+
+The UI must include:
+
+* Title: CSP-Guard
+* Short project description
+* Input box for Source Code
+* Input box for Destination Code
+* "Analyze Risk" button
+* Output section displaying:
+
+  * Risk Score (0 to 1)
+  * Risk Level (Safe, Low, Medium, High)
+  * Explanation of risk
+  * Suggested fixes
+
+Risk levels should be:
+
+* 0.00–0.15: Safe
+* 0.15–0.40: Low Risk
+* 0.40–0.70: Medium Risk
+* 0.70–1.00: High Risk
+
+The system must include these architecture components:
+* Parser
+* Clone Detector
+* Context Extractor
+* ECD Comparator
+* Risk Engine
+* Report Generator
+
+Integrate an AI API (use OpenRouter) to:
+
+* Perform semantic analysis of code
+* Compare context between snippets
+* Generate human-readable explanations and fixes
+
+Include this statement in the UI:
+"AI-assisted context-aware risk evaluation using LLM"
+
+The implementation should:
+
+* Be a single-page web application (HTML, CSS, JavaScript)
+* Work without a backend (API calls directly from frontend)
+* Be clean, minimal, and responsive
+* Clearly separate logic for clone detection, ECD computation, and risk scoring
+
+Also include sample test cases (e.g., Python, C, JavaScript snippets with safe and unsafe reuse) and display their scores.
+Ensure the output is visually clear and easy to understand, with proper formatting and structured sections.
+Code You need to push to: https://github.com/keerthisuryateja/CSP-Guard
+
+Prompt to make ppt:
+Generate a ppt to make the following content according to this order
+Slide-1: Title and Team Details
+Slide 2: Introduction of the project
+Slide 3: Objectives 
+Slide 4: Stakeholders (For whom the project is done)
+Slide 5: Programming Languages, Tools, and Software
+Slide 6: All prompts used to generate the codes (include more slides if required) 
+Slide 7: A flow chart of the workflow.
+Slide 8: Front-end view of your web/mobile application 
+Slide 9: Proof of Prompts generating codes (screenshots)
+Slide 10: References.
+
+Code:
+
+HTML:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSP-Guard</title>
+  <meta name="description" content="CSP-Guard analyzes copied code for reuse risk using clone detection, execution-context delta, and AI-assisted explanations.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="main.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar panel">
+      <div class="brand-block">
+        <div class="brand-mark">◉</div>
+        <div>
+          <h1>CSP-Guard</h1>
+        </div>
+      </div>
+      <div class="topbar-meta">
+      </div>
+    </header>
+
+    <section class="control-strip panel">
+      <div class="control-group">
+        <span class="label">LANG</span>
+        <button class="chip active" data-lang="python" type="button">Python</button>
+        <button class="chip" data-lang="javascript" type="button">JavaScript</button>
+        <button class="chip" data-lang="java" type="button">Java</button>
+      </div>
+      <div class="control-group samples">
+        <span class="label">SAMPLES</span>
+        <div id="sampleStrip" class="chip-row"></div>
+      </div>
+      <div class="control-group ai-controls">
+        <label class="toggle">
+          <input id="aiToggle" type="checkbox" checked>
+          <span>Use AI</span>
+        </label>
+        <input id="apiKeyInput" type="password" placeholder="AI key (optional)">
+        <button id="loadKeyBtn" class="ghost" type="button">Load key</button>
+        <button id="analyzeBtn" class="primary" type="button">Analyze Risk</button>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <article class="panel editor-panel">
+        <div class="panel-head">
+          <div>
+            <div class="subhead">Source Fragment</div>
+            <h2>Copied From</h2>
+          </div>
+          <span class="tag src">SRC</span>
+        </div>
+        <textarea id="sourceCode" spellcheck="false"></textarea>
+      </article>
+
+      <article class="panel editor-panel">
+        <div class="panel-head">
+          <div>
+            <div class="subhead">Destination Fragment</div>
+            <h2>Pasted Into</h2>
+          </div>
+          <span class="tag dst">DST</span>
+        </div>
+        <textarea id="destinationCode" spellcheck="false"></textarea>
+      </article>
+
+      <aside class="panel report-panel">
+        <div class="report-head">
+          <div>
+            <div class="subhead">Analysis Report</div>
+            <h2 id="statusText">Ready to analyze</h2>
+          </div>
+          <div class="risk-badge" id="riskBadge">Safe</div>
+        </div>
+
+        <div class="score-grid">
+          <div class="score-ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="track" cx="60" cy="60" r="50"></circle>
+              <circle class="progress" id="scoreRing" cx="60" cy="60" r="50"></circle>
+            </svg>
+            <div class="score-text">
+              <span>Risk Score</span>
+              <strong id="riskScore">0.00</strong>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric"><span>Clone</span><b id="cloneValue">0%</b></div>
+            <div class="metric"><span>ECD</span><b id="deltaValue">0%</b></div>
+            <div class="metric"><span>Level</span><b id="levelValue">Safe</b></div>
+          </div>
+        </div>
+
+        <div id="reportBody" class="report-body">
+          <div class="empty-state">Run an analysis to generate the report.</div>
+        </div>
+      </aside>
+    </section>
+
+  </main>
+</body>
+</html>
+
+CSS:
+:root {
+  color-scheme: dark;
+  --bg: #060910;
+  --bg-2: #0d1420;
+  --panel: rgba(11, 16, 25, 0.92);
+  --border: rgba(114, 145, 188, 0.18);
+  --text: #ebf2fb;
+  --muted: #93a7c3;
+  --accent: #15d7ff;
+  --accent-2: #7ef0a9;
+  --warning: #ffbb6d;
+  --danger: #ff6d8d;
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.38);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(21, 215, 255, 0.16), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(126, 240, 169, 0.11), transparent 28%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+  color: var(--text);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+body {
+  display: block;
+}
+
+.app-shell {
+  width: min(1400px, calc(100vw - 20px));
+  margin: 12px auto;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 10px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #071019;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  font-weight: 900;
+}
+
+h1, h2, p { margin: 0; }
+
+h1 {
+  font-size: clamp(1.4rem, 2.2vw, 2.2rem);
+  letter-spacing: -0.06em;
+}
+
+.topbar p {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pill {
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce7f6;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pill.subtle { color: var(--muted); }
+
+.control-strip {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1.2fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scroll-behavior: smooth;
+}
+
+.chip, .ghost, .primary, .sample-chip {
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.chip {
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #b8c7de;
+  font-size: 0.72rem;
+}
+
+.chip.active {
+  color: #071019;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.ai-controls {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+
+.ai-controls input {
+  width: 128px;
+  flex: 0 0 128px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+input, select, textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(5, 8, 13, 0.88);
+  color: var(--text);
+  border-radius: 12px;
+  outline: none;
+  font: inherit;
+}
+
+input, select {
+  padding: 7px 9px;
+  height: 30px;
+  font-size: 0.76rem;
+}
+
+.ghost {
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.primary {
+  padding: 7px 11px;
+  background: linear-gradient(135deg, #19b9ff, #7c63ff);
+  color: #071019;
+  box-shadow: 0 10px 24px rgba(25, 185, 255, 0.14);
+  font-size: 0.76rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 1.08fr 1.08fr 1fr;
+  gap: 10px;
+  min-height: 0;
+}
+
+.editor-panel, .report-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  padding: 12px;
+}
+
+.panel-head, .report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.subhead {
+  color: var(--muted);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.panel-head h2, .report-head h2 {
+  font-size: 0.86rem;
+  letter-spacing: -0.03em;
+}
+
+.tag {
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.src { color: #c58cff; background: rgba(197, 140, 255, 0.12); }
+.dst { color: #49d7ff; background: rgba(73, 215, 255, 0.12); }
+
+textarea {
+  min-height: 0;
+  resize: none;
+  padding: 9px;
+  line-height: 1.3;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+}
+
+.risk-badge {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.score-ring {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  justify-self: center;
+}
+
+.score-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.track, .progress {
+  fill: none;
+  stroke-width: 12;
+  cx: 60;
+  cy: 60;
+  r: 50;
+}
+
+.track { stroke: rgba(255, 255, 255, 0.09); }
+
+.progress {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 314;
+  stroke-dashoffset: 314;
+  transition: stroke-dashoffset 0.7s ease, stroke 0.35s ease;
+}
+
+.score-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.score-text span {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.score-text strong {
+  font-size: 1.18rem;
+  letter-spacing: -0.05em;
+}
+
+.metrics {
+  display: grid;
+  gap: 4px;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.metric span {
+  color: var(--muted);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.metric b { font-size: 0.7rem; }
+
+.report-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.report-rail-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.rail-title {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.rail-items, .sample-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rail-items span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #c9d7ea;
+  font-size: 0.73rem;
+}
+
+.report-section, .sample-result {
+  padding: 7px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.report-section h3, .sample-result strong {
+  font-size: 0.66rem;
+}
+
+.report-section p, .report-section li, .sample-result p {
+  color: var(--muted);
+  line-height: 1.18;
+  font-size: 0.64rem;
+}
+
+.report-section ul {
+  margin: 0;
+  padding-left: 14px;
+}
+
+.report-section.wide {
+  grid-column: 1 / -1;
+}
+
+.signal-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.signal-row span {
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.6rem;
+  color: #dce7f6;
+}
+
+.empty-state {
+  color: var(--muted);
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  font-size: 0.64rem;
+}
+
+.bottom-rail {
+  display: none;
+}
+
+.rail-panel {
+  padding: 6px 8px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 5px;
+  min-height: 0;
+}
+
+.sample-chip {
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.6rem;
+  white-space: nowrap;
+}
+
+.sample-chip.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #071019; }
+
+@media (max-width: 1280px) {
+  .app-shell {
+    width: calc(100vw - 16px);
+    margin: 8px auto;
+  }
+
+  .workspace { grid-template-columns: 1fr 1fr 0.95fr; }
+
+  .control-strip { grid-template-columns: 1fr 1.4fr 1.2fr; }
+
+  .report-body { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1024px) {
+  html, body { overflow: auto; }
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    grid-template-rows: auto;
+  }
+
+  .workspace,
+  .bottom-rail,
+  .control-strip,
+  .topbar {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .ai-controls {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+JS
+const SAMPLE_CASES = [
+  {
+    id: "py-safe",
+    label: "Safe",
+    type: "Python",
+    source: `def clamp_value(value, minimum, maximum):
+    return max(minimum, min(value, maximum))`,
+    destination: `def clamp_value(value, minimum, maximum):
+    return max(minimum, min(value, maximum))`
+  },
+  {
+    id: "py-unsafe",
+    label: "Unsafe",
+    type: "Python",
+    source: `def build_query(user_id):
+    return "SELECT * FROM users WHERE id = %s" % user_id`,
+    destination: `def search_users(request):
+    user_id = request.args.get("id")
+    query = build_query(user_id)
+    cursor.execute(query)
+    eval(query)`
+  },
+  {
+    id: "js-low",
+    label: "Low",
+    type: "JavaScript",
+    source: `function add(a, b) {
+  return Number(a) + Number(b);
+}`,
+    destination: `const add = (left, right) => Number(left) + Number(right);`
+  },
+  {
+    id: "java-medium",
+    label: "Medium",
+    type: "Java",
+    source: `int safeParse(String value) {
+  return Integer.parseInt(value.trim());
+}`,
+    destination: `int safeParse(HttpServletRequest request) {
+  String value = request.getParameter("port");
+  return Integer.parseInt(value);
+}`
+  },
+  {
+    id: "py-low-io",
+    label: "Low",
+    type: "Python",
+    source: `def read_config(path):
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read().strip()`,
+    destination: `def read_config(file_path):
+    with open(file_path, "r", encoding="utf-8") as stream:
+        return stream.read().strip()`
+  },
+  {
+    id: "js-medium-taint",
+    label: "Medium",
+    type: "JavaScript",
+    source: `function formatName(name) {
+  return name.trim().toLowerCase();
+}`,
+    destination: `function formatName(req) {
+  const name = req.query.name;
+  document.querySelector("#out").innerHTML = name.trim().toLowerCase();
+}`
+  },
+  {
+    id: "py-high",
+    label: "High",
+    type: "Python",
+    source: `def process_data(data):
+    return data.upper()
+
+def validate(val):
+    return process_data(val)`,
+    destination: `def process_data(request):
+    data = request.form.get('input')
+    exec(data)
+    return data.upper()
+
+def validate(req):
+    val = process_data(req)
+    eval(val)
+    return val`
+  },
+  {
+    id: "java-high",
+    label: "High",
+    type: "Java",
+    source: `String buildQuery(String userId) {
+  return "SELECT * FROM users WHERE id = " + userId;
+}`,
+    destination: `String buildQuery(HttpServletRequest request) {
+  String userId = request.getParameter("id");
+  String query = "SELECT * FROM users WHERE id = " + userId;
+  eval(query);
+  return query;
+}`
+  }
+];
+
+const DOM = {
+  sourceCode: document.getElementById("sourceCode"),
+  destinationCode: document.getElementById("destinationCode"),
+  analyzeBtn: document.getElementById("analyzeBtn"),
+  reportBody: document.getElementById("reportBody"),
+  riskScore: document.getElementById("riskScore"),
+  riskBadge: document.getElementById("riskBadge"),
+  scoreRing: document.getElementById("scoreRing"),
+  statusText: document.getElementById("statusText"),
+  apiKeyInput: document.getElementById("apiKeyInput"),
+  aiToggle: document.getElementById("aiToggle"),
+  loadKeyBtn: document.getElementById("loadKeyBtn"),
+  sampleStrip: document.getElementById("sampleStrip"),
+  cloneValue: document.getElementById("cloneValue"),
+  deltaValue: document.getElementById("deltaValue"),
+  levelValue: document.getElementById("levelValue")
+};
+
+const RING_CIRCUMFERENCE = 2 * Math.PI * 50;
+DOM.scoreRing.style.strokeDasharray = String(RING_CIRCUMFERENCE.toFixed(2));
+
+function safeStorageGet(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+
+function safeStorageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch { return; }
+}
+
+const state = {
+  apiKey: safeStorageGet("cspGuardApiKey", ""),
+  useAI: safeStorageGet("cspGuardUseAI", "true") !== "false"
+};
+
+DOM.apiKeyInput.value = state.apiKey;
+DOM.aiToggle.checked = state.useAI;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalize(code) {
+  return code
+    .replace(/\/\/.*?$|\/\*[\s\S]*?\*\/|#.*?$/gm, " ")
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, " STRING ");
+}
+
+function tokenize(code) {
+  return normalize(code).match(/[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|=>|[{}()[\];,.:+\-*/%<>!=]/g)?.map(token => token.toLowerCase()) || [];
+}
+
+function jaccard(listA, listB) {
+  const setA = new Set(listA);
+  const setB = new Set(listB);
+  const union = new Set([...setA, ...setB]);
+  let intersection = 0;
+  for (const token of setA) if (setB.has(token)) intersection += 1;
+  return union.size ? intersection / union.size : 0;
+}
+
+function freqMap(list) {
+  const map = new Map();
+  for (const item of list) map.set(item, (map.get(item) || 0) + 1);
+  return map;
+}
+
+function cosineSimilarity(listA, listB) {
+  const left = freqMap(listA);
+  const right = freqMap(listB);
+  const keys = new Set([...left.keys(), ...right.keys()]);
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+  for (const key of keys) {
+    const a = left.get(key) || 0;
+    const b = right.get(key) || 0;
+    dot += a * b;
+    magA += a * a;
+    magB += b * b;
+  }
+  return magA && magB ? dot / (Math.sqrt(magA) * Math.sqrt(magB)) : 0;
+}
+
+function structuralSignature(code) {
+  return tokenize(code).map(token => {
+    if (/^\d+$/.test(token)) return "NUM";
+    if (["if", "for", "while", "switch", "try", "catch", "function", "def", "class", "return", "const", "let", "var", "int", "String"].includes(token)) return token;
+    if (/^[{}()[\];,.:+\-*/%<>!=]+$/.test(token)) return token;
+    return "ID";
+  });
+}
+
+function extractBlocks(code) {
+  const lines = code.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const blocks = [];
+  let current = [];
+  let depth = 0;
+  for (const line of lines) {
+    current.push(line.replace(/\s+/g, " "));
+    depth += (line.match(/[({[]/g) || []).length;
+    depth -= (line.match(/[)}\]]/g) || []).length;
+    if (depth <= 0) {
+      blocks.push(current.join(" "));
+      current = [];
+      depth = 0;
+    }
+  }
+  if (current.length) blocks.push(current.join(" "));
+  return blocks.length ? blocks : lines.slice(0, 12);
+}
+
+function astSimilarity(source, destination) {
+  const blocksA = extractBlocks(source).map(block => block.toLowerCase());
+  const blocksB = extractBlocks(destination).map(block => block.toLowerCase());
+  const sigA = structuralSignature(source);
+  const sigB = structuralSignature(destination);
+  return clamp((0.55 * jaccard(blocksA, blocksB) + 0.45 * cosineSimilarity(blocksA, blocksB) + 0.65 * jaccard(sigA, sigB) + 0.35 * cosineSimilarity(sigA, sigB)) / 2, 0, 1);
+}
+
+function extractDataFlow(code) {
+  const identifiers = code.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || [];
+  const usage = new Set(identifiers.map(item => item.toLowerCase()));
+  return {
+    identifiers: [...usage],
+    taint: /request|input|argv|stdin|prompt|body|params|cookies|headers|fetch\(/i.test(code),
+    sink: /eval\(|exec\(|innerHTML|document\.write|execute\(|gets\(|system\(|sprintf|strcpy/i.test(code)
+  };
+}
+
+function inferContext(code) {
+  const lines = code.split(/\r?\n/);
+  const variables = new Map();
+  for (const line of lines) {
+    const match = line.match(/\b(?:const|let|var|int|float|double|char|bool|boolean|String|str)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (match) {
+      variables.set(match[1].toLowerCase(), {
+        type: /String|str/.test(line) ? "string" : /int|float|double|number/.test(line) ? "number" : "unknown",
+        scope: /function|def/.test(line) ? "function" : "module",
+        mutability: /const|final/.test(line) ? "immutable" : "mutable"
+      });
+    }
+  }
+
+  return {
+    tokens: tokenize(code),
+    variables: [...variables.entries()].map(([name, meta]) => ({ name, ...meta })),
+    bindings: [...variables.keys()],
+    exceptionHandling: /try\b|catch\b|except\b|finally\b/i.test(code),
+    taint: {
+      sources: [...code.matchAll(/\b(request|input|argv|stdin|prompt|body|params|cookies|headers)\b/gi)].map(match => match[1].toLowerCase()),
+      sinks: [...code.matchAll(/\b(eval|exec|innerHTML|document\.write|execute|gets|system|sprintf|strcpy)\b/gi)].map(match => match[1].toLowerCase())
+    },
+    resources: {
+      file: /open\(|fopen\(|readFile|writeFile|fs\.|File\b/i.test(code),
+      network: /fetch\(|axios|requests\.|http\.|socket|XMLHttpRequest/i.test(code),
+      process: /spawn|system\(|subprocess|exec\(|os\.system/i.test(code)
+    },
+    dataFlow: extractDataFlow(code)
+  };
+}
+
+function compareContexts(sourceContext, destinationContext) {
+  const sourceVars = new Map(sourceContext.variables.map(item => [item.name, item]));
+  const destVars = new Map(destinationContext.variables.map(item => [item.name, item]));
+  const names = new Set([...sourceVars.keys(), ...destVars.keys()]);
+
+  let variableDelta = 0;
+  const drift = [];
+  for (const name of names) {
+    const left = sourceVars.get(name);
+    const right = destVars.get(name);
+    if (!left || !right) {
+      variableDelta += 0.6;
+      drift.push(`${name}: added/removed`);
+      continue;
+    }
+    const changes = [];
+    if (left.type !== right.type) changes.push(`type ${left.type} -> ${right.type}`);
+    if (left.scope !== right.scope) changes.push(`scope ${left.scope} -> ${right.scope}`);
+    if (left.mutability !== right.mutability) changes.push(`mutability ${left.mutability} -> ${right.mutability}`);
+    if (changes.length) {
+      variableDelta += 0.3 * changes.length;
+      drift.push(`${name}: ${changes.join(", ")}`);
+    }
+  }
+
+  const bindings = new Set([...sourceContext.bindings, ...destinationContext.bindings]);
+  const overlap = [...bindings].filter(name => sourceContext.bindings.includes(name) && destinationContext.bindings.includes(name)).length;
+  const scopeDelta = bindings.size ? 1 - overlap / bindings.size : 0;
+  const resourceDelta = Number(sourceContext.resources.file !== destinationContext.resources.file) + Number(sourceContext.resources.network !== destinationContext.resources.network) + Number(sourceContext.resources.process !== destinationContext.resources.process);
+
+  return {
+    variableDelta: clamp(variableDelta / Math.max(1, names.size), 0, 1),
+    scopeDelta: clamp(scopeDelta, 0, 1),
+    exceptionDelta: sourceContext.exceptionHandling === destinationContext.exceptionHandling ? 0 : 1,
+    taintDelta: (sourceContext.taint.sources.length !== destinationContext.taint.sources.length || sourceContext.taint.sinks.length !== destinationContext.taint.sinks.length) ? 1 : 0,
+    resourceDelta: clamp(resourceDelta / 3, 0, 1),
+    drift
+  };
+}
+
+function riskBand(score) {
+  if (score < 0.15) return { label: "Safe", color: "#7ef0a9", background: "rgba(126, 240, 169, 0.12)" };
+  if (score < 0.4) return { label: "Low Risk", color: "#15d7ff", background: "rgba(21, 215, 255, 0.12)" };
+  if (score < 0.7) return { label: "Medium Risk", color: "#ffbb6d", background: "rgba(255, 187, 109, 0.12)" };
+  return { label: "High Risk", color: "#ff6d8d", background: "rgba(255, 109, 141, 0.12)" };
+}
+
+function localAnalysis(source, destination) {
+  const sourceContext = inferContext(source);
+  const destinationContext = inferContext(destination);
+  const tokenSimilarity = jaccard(sourceContext.tokens, destinationContext.tokens);
+  const structuralSimilarity = astSimilarity(source, destination);
+  const dataFlowSimilarity = clamp(jaccard(sourceContext.dataFlow.identifiers, destinationContext.dataFlow.identifiers) * 0.75 + cosineSimilarity(sourceContext.dataFlow.identifiers, destinationContext.dataFlow.identifiers) * 0.25, 0, 1);
+  const cloneScore = clamp(tokenSimilarity * 0.4 + structuralSimilarity * 0.35 + dataFlowSimilarity * 0.25, 0, 1);
+  const contextDelta = compareContexts(sourceContext, destinationContext);
+  const deltaScore = clamp(contextDelta.variableDelta * 0.32 + contextDelta.scopeDelta * 0.2 + contextDelta.exceptionDelta * 0.12 + contextDelta.taintDelta * 0.22 + contextDelta.resourceDelta * 0.14, 0, 1);
+  let risk = clamp(cloneScore * 0.15 + deltaScore * 0.65, 0, 1);
+  if (destinationContext.dataFlow.taint && destinationContext.dataFlow.sink) risk = clamp(risk + 0.28, 0, 1);
+  if (/eval\(|exec\(|gets\(|system\(|innerHTML|document\.write/i.test(destination)) risk = clamp(risk + 0.18, 0, 1);
+
+  return {
+    sourceContext,
+    destinationContext,
+    tokenSimilarity,
+    structuralSimilarity,
+    dataFlowSimilarity,
+    cloneScore,
+    contextDelta,
+    deltaScore,
+    risk
+  };
+}
+
+function explain(assessment) {
+  const notes = [];
+  if (assessment.cloneScore > 0.55) notes.push("High structural overlap.");
+  if (assessment.contextDelta.variableDelta > 0.3) notes.push("Variable shape changed.");
+  if (assessment.contextDelta.scopeDelta > 0.25) notes.push("Scope bindings shifted.");
+  if (assessment.contextDelta.exceptionDelta) notes.push("Error handling changed.");
+  if (assessment.contextDelta.taintDelta) notes.push("User input reaches a different sink path.");
+  if (assessment.contextDelta.resourceDelta > 0.2) notes.push("Resource access changed.");
+  return notes.length ? notes.join(" ") : "The snippets align closely and the execution-context delta is small.";
+}
+
+function fixes(assessment) {
+  const items = [];
+  if (assessment.contextDelta.taintDelta) items.push("Sanitize user-controlled input before it reaches a sink.");
+  if (assessment.contextDelta.scopeDelta) items.push("Rebind copied variables instead of assuming the original scope.");
+  if (assessment.contextDelta.exceptionDelta) items.push("Mirror the source error handling in the destination context.");
+  if (assessment.contextDelta.resourceDelta) items.push("Reapply file, network, and process safety checks.");
+  if (!items.length) items.push("Keep the logic, but re-run validation and tests in the destination context.");
+  return items.slice(0, 3);
+}
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function requestAI(source, destination, assessment) {
+  if (!state.useAI || !state.apiKey) return null;
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${state.apiKey}`,
+        "HTTP-Referer": location.origin === "null" ? "http://localhost" : location.origin,
+        "X-Title": "CSP-Guard"
+      },
+      body: JSON.stringify({
+        model: "openrouter/free",
+        messages: [
+          {
+            role: "system",
+            content: "Explain code reuse risk in plain language and return JSON with explanation and fixes."
+          },
+          {
+            role: "user",
+            content: JSON.stringify({ source, destination, localAssessment: assessment }, null, 2)
+          }
+        ],
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) throw new Error(await response.text() || `AI request failed with status ${response.status}`);
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { explanation: text.trim(), fixes: [] };
+    }
+  } catch (error) {
+    DOM.statusText.textContent = `AI unavailable, using local analysis: ${error.message}`;
+    return null;
+  }
+}
+
+function renderReport(assessment, aiResult) {
+  const band = riskBand(assessment.risk);
+  DOM.riskScore.textContent = assessment.risk.toFixed(2);
+  DOM.riskBadge.textContent = band.label;
+  DOM.riskBadge.style.background = band.background;
+  DOM.riskBadge.style.color = band.color;
+  DOM.scoreRing.style.stroke = band.color;
+  DOM.scoreRing.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - assessment.risk));
+
+  DOM.cloneValue.textContent = `${Math.round(assessment.cloneScore * 100)}%`;
+  DOM.deltaValue.textContent = `${Math.round(assessment.deltaScore * 100)}%`;
+  DOM.levelValue.textContent = `${band.label} (${Math.round(assessment.risk * 100)}%)`;
+
+  const explanation = aiResult?.explanation || explain(assessment);
+  const fixList = Array.isArray(aiResult?.fixes) && aiResult.fixes.length ? aiResult.fixes : fixes(assessment);
+
+  DOM.reportBody.innerHTML = `
+    <section class="report-section wide">
+      <h3>Risk Overview</h3>
+      <p>${escapeHtml(explanation)}</p>
+      <div class="signal-row">
+        <span>Clone ${Math.round(assessment.cloneScore * 100)}%</span>
+        <span>ECD ${Math.round(assessment.deltaScore * 100)}%</span>
+        <span>${band.label} ${Math.round(assessment.risk * 100)}%</span>
+      </div>
+    </section>
+    <section class="report-section">
+      <h3>Clone + ECD</h3>
+      <ul>
+        <li>Token: ${Math.round(assessment.tokenSimilarity * 100)}%</li>
+        <li>AST: ${Math.round(assessment.structuralSimilarity * 100)}%</li>
+        <li>Data flow: ${Math.round(assessment.dataFlowSimilarity * 100)}%</li>
+        <li>V/S/E/T/R: ${Math.round(assessment.contextDelta.variableDelta * 100)} / ${Math.round(assessment.contextDelta.scopeDelta * 100)} / ${Math.round(assessment.contextDelta.exceptionDelta * 100)} / ${Math.round(assessment.contextDelta.taintDelta * 100)} / ${Math.round(assessment.contextDelta.resourceDelta * 100)}%</li>
+      </ul>
+    </section>
+    <section class="report-section">
+      <h3>Suggested Fixes</h3>
+      <ul>${fixList.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </section>
+  `;
+}
+
+function renderSamples() {
+  const sampleButtons = SAMPLE_CASES.map(sample => {
+    const assessment = localAnalysis(sample.source, sample.destination);
+    return `
+      <button class="sample-chip" data-sample-id="${sample.id}" type="button">
+        ${sample.label} [${sample.type}] ${assessment.risk.toFixed(2)}
+      </button>
+    `;
+  }).join("");
+
+  DOM.sampleStrip.innerHTML = sampleButtons;
+
+  document.querySelectorAll("[data-sample-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      const sample = SAMPLE_CASES.find(entry => entry.id === button.dataset.sampleId);
+      if (!sample) return;
+      DOM.sourceCode.value = sample.source;
+      DOM.destinationCode.value = sample.destination;
+      DOM.statusText.textContent = `Loaded sample: ${sample.label}`;
+    });
+  });
+}
+
+function setInitialSample(sample) {
+  DOM.sourceCode.value = sample.source;
+  DOM.destinationCode.value = sample.destination;
+  DOM.statusText.textContent = `Loaded sample: ${sample.label}`;
+}
+
+async function analyze() {
+  const source = DOM.sourceCode.value.trim();
+  const destination = DOM.destinationCode.value.trim();
+
+  if (!source || !destination) {
+    DOM.statusText.textContent = "Paste both source and destination code first.";
+    DOM.reportBody.innerHTML = '<div class="empty-state">Both code inputs are required before analysis.</div>';
+    return;
+  }
+
+  DOM.analyzeBtn.disabled = true;
+  DOM.analyzeBtn.textContent = "Analyzing...";
+  DOM.statusText.textContent = "Running clone detection, ECD computation, and risk scoring...";
+
+  try {
+    const assessment = localAnalysis(source, destination);
+    const aiResult = await requestAI(source, destination, assessment);
+    renderReport(assessment, aiResult);
+    DOM.statusText.textContent = `Analysis complete. Risk level: ${riskBand(assessment.risk).label}.`;
+  } catch (error) {
+    DOM.statusText.textContent = `Analysis failed: ${error.message}`;
+    DOM.reportBody.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  } finally {
+    DOM.analyzeBtn.disabled = false;
+    DOM.analyzeBtn.textContent = "Analyze Risk";
+  }
+}
+
+function loadKeyFromFile() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".txt,.key,text/plain";
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const key = text.trim().split(/\r?\n/).find(Boolean) || "";
+    DOM.apiKeyInput.value = key;
+    DOM.statusText.textContent = "AI key loaded from file.";
+    safeStorageSet("cspGuardApiKey", key);
+  }, { once: true });
+  input.click();
+}
+
+document.querySelectorAll(".chip[data-lang]").forEach(button => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".chip[data-lang]").forEach(item => item.classList.remove("active"));
+    button.classList.add("active");
+  });
+});
+
+DOM.apiKeyInput.addEventListener("input", () => safeStorageSet("cspGuardApiKey", DOM.apiKeyInput.value.trim()));
+DOM.aiToggle.addEventListener("change", () => safeStorageSet("cspGuardUseAI", String(DOM.aiToggle.checked)));
+DOM.loadKeyBtn.addEventListener("click", loadKeyFromFile);
+DOM.analyzeBtn.addEventListener("click", analyze);
+
+renderSamples();
+setInitialSample(SAMPLE_CASES[0]);
+safeStorageSet("cspGuardUseAI", String(DOM.aiToggle.checked));
+analyze();
+
+
